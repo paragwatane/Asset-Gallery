@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asset Gallery</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+
+<script>
+  // Set the theme before the page paints, so there is no flash
+  (function () {
+    var saved = null;
+    try { saved = localStorage.getItem("theme"); } catch (e) {}
+    var theme = saved || (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    document.documentElement.dataset.theme = theme;
+  })();
+</script>
+
+<style>
+  /* ---------- Tokens ----------
+     Palette is borrowed from a 3D viewport: graphite UI, a floor grid with red X and
+     green Y axis lines, and the orange outline Blender draws around a selected object. */
+  :root {
+    color-scheme: dark;
+    --bg: #202328;
+    --raised: #2a2e34;
+    --well: #1a1c20;
+    --ink: #e9ebee;
+    --muted: #9aa1ab;
+    --faint: #6b727d;
+    --line: rgba(255, 255, 255, 0.09);
+    --line-strong: rgba(255, 255, 255, 0.2);
+    --select: #ffa31a;
+    --danger: #ff8274;
+    --ok: #6bd39a;
+    --grid: rgba(255, 255, 255, 0.08);
+    --axis-x: rgba(236, 86, 86, 0.75);
+    --axis-y: rgba(120, 208, 96, 0.75);
+    --shadow: 0 28px 56px -30px rgba(0, 0, 0, 0.7);
+    --display: "Syne", "Segoe UI", system-ui, sans-serif;
+    --sans: "Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #eceef1;
+    --raised: #ffffff;
+    --well: #e0e3e8;
+    --ink: #1c2026;
+    --muted: #5c6470;
+    --faint: #8b929c;
+    --line: rgba(28, 32, 38, 0.1);
+    --line-strong: rgba(28, 32, 38, 0.24);
+    --select: #c46f00;
+    --danger: #c0392b;
+    --ok: #1d7a47;
+    --grid: rgba(28, 32, 38, 0.1);
+    --axis-x: rgba(214, 64, 64, 0.7);
+    --axis-y: rgba(70, 160, 60, 0.75);
+    --shadow: 0 24px 44px -28px rgba(28, 32, 38, 0.45);
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  body:has(dialog[open]) { overflow: hidden; }
+
+  button, input, select, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+  button { cursor: pointer; }
+
+  :focus-visible { outline: 2px solid var(--select); outline-offset: 2px; }
+
+  .ico { display: inline-flex; flex: none; }
+  .ico svg { width: 1.15em; height: 1.15em; display: block; }
+
+  .wrap { width: min(1240px, 100% - 3rem); margin-inline: auto; }
+
+  /* ---------- Buttons ---------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1.15rem;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    font-weight: 600;
+    text-decoration: none;
+    line-height: 1.2;
+  }
+  .btn.primary { background: var(--ink); color: var(--bg); }
+  .btn.primary:hover { opacity: 0.88; }
+  .btn.primary:disabled { opacity: 0.55; cursor: progress; }
+  .btn.ghost { background: transparent; border-color: var(--line-strong); color: var(--ink); }
+  .btn.ghost:hover { background: var(--raised); }
+  .btn.danger { background: transparent; border-color: var(--line-strong); color: var(--danger); }
+  .btn.danger:hover { background: var(--raised); }
+
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--line-strong);
+    background: transparent;
+  }
+  .icon-btn:hover { background: var(--raised); }
+
+  /* ---------- Top bar ---------- */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.1rem 0; position: relative; z-index: 2; }
+  .brand { display: inline-flex; align-items: center; gap: 0.6rem; color: var(--ink); text-decoration: none; font-family: var(--display); font-weight: 700; font-size: 1.15rem; letter-spacing: -0.01em; }
+  .brand .ico svg { width: 1.6rem; height: 1.6rem; stroke-width: 1.5; }
+  .top-actions { display: flex; align-items: center; gap: 0.6rem; }
+  .status { display: inline-flex; align-items: center; gap: 0.45rem; margin-right: 0.4rem; color: var(--muted); font-size: 0.85rem; }
+  .status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .status.online .dot { background: var(--ok); }
+  .status.offline .dot { background: var(--danger); }
+  .status.offline { color: var(--danger); }
+
+  /* ---------- Stage: floor grid + headline + featured piece ---------- */
+  .stage { position: relative; overflow: hidden; }
+  .stage-inner { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 3.5rem; align-items: center; padding: 3.5rem 0 5rem; min-height: 520px; }
+
+  .floor-wrap {
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 72%;
+    perspective: 520px;
+    pointer-events: none;
+    -webkit-mask-image: linear-gradient(to top, #000 8%, transparent 92%);
+            mask-image: linear-gradient(to top, #000 8%, transparent 92%);
+  }
+  .floor {
+    position: absolute;
+    inset: 0 -60% 0 -60%;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 56px 56px;
+    background-position: center bottom;
+    transform: rotateX(68deg);
+    transform-origin: 50% 100%;
+  }
+  .floor::before { content: ""; position: absolute; left: 0; right: 0; top: 52%; height: 2px; background: var(--axis-x); }
+  .floor::after  { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: var(--axis-y); }
+
+  h1 {
+    margin: 0 0 1.1rem;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(2.3rem, 4.6vw, 4rem);
+    line-height: 1.04;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+  .lede { margin: 0 0 1.75rem; max-width: 46ch; color: var(--muted); font-size: 1.05rem; line-height: 1.6; }
+  .stage-cta { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 2.25rem; }
+  .text-link { color: var(--ink); font-weight: 600; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 4px; }
+  .text-link:hover { text-decoration-color: var(--select); }
+
+  .facts { display: flex; flex-wrap: wrap; gap: 0.6rem 1.75rem; margin: 0; padding: 0; list-style: none; color: var(--muted); }
+  .facts li { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .facts strong { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .stage-visual { min-height: 320px; display: flex; flex-direction: column; justify-content: center; }
+
+  .featured { margin: 0; }
+  .feat-cap { display: flex; flex-direction: column; gap: 0.1rem; margin-top: 0.9rem; }
+  .feat-title { font-family: var(--display); font-weight: 600; font-size: 1.25rem; letter-spacing: -0.01em; }
+  .feat-sub { color: var(--muted); font-size: 0.9rem; }
+
+  /* A wireframe cube on a turntable, shown while the library is empty */
+  .turntable { display: grid; place-items: center; height: 340px; perspective: 900px; }
+  .cube { position: relative; width: 150px; height: 150px; transform-style: preserve-3d; animation: spin 20s linear infinite; }
+  .cube i { position: absolute; inset: 0; border: 1.5px solid var(--line-strong); background: linear-gradient(135deg, var(--grid), transparent 70%); }
+  .cube i:nth-child(1) { transform: translateZ(75px); }
+  .cube i:nth-child(2) { transform: rotateY(180deg) translateZ(75px); }
+  .cube i:nth-child(3) { transform: rotateY(90deg) translateZ(75px); }
+  .cube i:nth-child(4) { transform: rotateY(-90deg) translateZ(75px); }
+  .cube i:nth-child(5) { transform: rotateX(90deg) translateZ(75px); border-color: var(--select); }
+  .cube i:nth-child(6) { transform: rotateX(-90deg) translateZ(75px); }
+  @keyframes spin {
+    from { transform: rotateX(-24deg) rotateY(0deg); }
+    to   { transform: rotateX(-24deg) rotateY(360deg); }
+  }
+
+  /* ---------- Media frame, shared by cards and the featured piece ---------- */
+  .media { position: relative; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: var(--well); }
+  .media-btn { display: block; width: 100%; height: 100%; padding: 0; border: 0; background: transparent; color: var(--faint); }
+  .media-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .media-btn:focus-visible { outline: none; }
+  .placeholder { display: grid; place-items: center; width: 100%; height: 100%; }
+  .placeholder .ico svg { width: 2.6rem; height: 2.6rem; stroke-width: 1.2; }
+
+  /* The orange outline Blender draws around the selected object */
+  .media::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 0 var(--select);
+    pointer-events: none;
+    transition: box-shadow 0.12s ease-out;
+  }
+  .asset:hover .media::after, .asset:focus-within .media::after,
+  .featured:hover .media::after, .featured:focus-within .media::after { box-shadow: inset 0 0 0 3px var(--select); }
+
+  .tools { position: absolute; top: 0.6rem; right: 0.6rem; display: flex; gap: 0.35rem; opacity: 0; z-index: 1; }
+  .asset:hover .tools, .asset:focus-within .tools { opacity: 1; }
+  @media (hover: none) { .tools { opacity: 1; } }
+  .tool {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(18, 20, 24, 0.74);
+    -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px);
+    color: #fff;
+    text-decoration: none;
+  }
+  .tool:hover { background: rgba(18, 20, 24, 0.95); }
+  .tool.delete:hover { color: var(--danger); }
+
+  /* ---------- Library ---------- */
+  .library { padding-bottom: 5rem; }
+
+  .toolbar { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; padding-bottom: 0.25rem; border-bottom: 1px solid var(--line); margin-bottom: 2rem; }
+  .tabs { display: flex; gap: 1.5rem; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { padding: 0.8rem 0; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--muted); font-weight: 500; white-space: nowrap; }
+  .tab:hover { color: var(--ink); }
+  .tab[aria-pressed="true"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--select); }
+  .tab-count { margin-left: 0.4rem; color: var(--faint); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+
+  .search { position: relative; display: flex; align-items: center; width: min(300px, 100%); margin-bottom: 0.5rem; }
+  .search .ico { position: absolute; left: 0.8rem; color: var(--muted); pointer-events: none; }
+  .search input { width: 100%; padding: 0.6rem 2.4rem 0.6rem 2.4rem; border: 1px solid transparent; border-radius: 10px; background: var(--well); }
+  .search input::placeholder { color: var(--faint); }
+  .search input:focus { outline: none; border-color: var(--select); }
+  .search kbd { position: absolute; right: 0.7rem; padding: 0 0.4rem; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--faint); font: inherit; font-size: 0.78rem; }
+
+  .result-count { margin: -0.75rem 0 1.25rem; color: var(--muted); font-size: 0.9rem; }
+  .result-count:empty { display: none; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 2.25rem 1.5rem; }
+
+  .caption { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; margin-top: 0.8rem; }
+  .asset-title { margin: 0; font-size: 1.02rem; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+  .asset-cat { flex: none; color: var(--muted); font-size: 0.85rem; }
+
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 1rem; margin-top: 0.3rem; color: var(--muted); font-size: 0.85rem; }
+  .meta span { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .meta .ico svg { width: 1em; height: 1em; }
+  .meta .ext { padding: 0 0.4rem; border: 1px solid var(--line-strong); border-radius: 5px; font-size: 0.78rem; color: var(--ink); }
+
+  .skeleton .media, .skeleton .bar { background: linear-gradient(90deg, var(--well) 25%, var(--raised) 50%, var(--well) 75%); background-size: 200% 100%; animation: shimmer 1.3s linear infinite; }
+  .skeleton .bar { height: 14px; border-radius: 6px; margin-top: 0.8rem; width: 60%; }
+  .skeleton .bar + .bar { width: 35%; margin-top: 0.5rem; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  .notice { max-width: 46ch; padding: 2rem 0 1rem; }
+  .notice h2 { margin: 0 0 0.4rem; font-family: var(--display); font-size: 1.4rem; letter-spacing: -0.01em; }
+  .notice p { margin: 0 0 1.1rem; color: var(--muted); }
+
+  /* ---------- Dialogs ---------- */
+  dialog { padding: 0; border: 1px solid var(--line); background: var(--raised); color: var(--ink); box-shadow: var(--shadow); }
+  dialog::backdrop { background: rgba(8, 9, 11, 0.62); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+
+  /* Upload / edit drawer */
+  .drawer { margin: 0 0 0 auto; width: min(500px, 100vw); max-width: none; height: 100dvh; max-height: none; border-radius: 0; border-width: 0 0 0 1px; }
+  .drawer[open] { animation: slide-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  @keyframes slide-in { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .drawer form { display: flex; flex-direction: column; height: 100%; }
+  .drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.4rem 1.5rem 1rem; }
+  .drawer-head h2 { margin: 0; font-family: var(--display); font-size: 1.5rem; letter-spacing: -0.015em; }
+  .drawer-head p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.92rem; }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 0.5rem 1.5rem 1.5rem; display: flex; flex-direction: column; gap: 1.1rem; }
+  .drawer-foot { display: flex; justify-content: flex-end; gap: 0.6rem; padding: 1rem 1.5rem; border-top: 1px solid var(--line); background: var(--raised); }
+
+  .field { display: flex; flex-direction: column; gap: 0.4rem; }
+  .field-label { font-weight: 600; font-size: 0.9rem; }
+  .hint { color: var(--muted); font-size: 0.82rem; }
+  .field input[type="text"], .field input[type="number"], .field select, .field textarea {
+    width: 100%;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: var(--well);
+  }
+  .field input::placeholder, .field textarea::placeholder { color: var(--faint); }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--select); }
+  .field textarea { min-height: 96px; resize: vertical; }
+  .field select {
+    appearance: none;
+    padding-right: 2.2rem;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1.5l5 5 5-5' fill='none' stroke='%239aa1ab' stroke-width='1.8' stroke-linecap='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.8rem center;
+  }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+
+  .form-error { padding: 0.7rem 0.9rem; border: 1px solid var(--danger); border-radius: 10px; color: var(--danger); font-size: 0.9rem; }
+  .form-error:empty { display: none; }
+
+  /* Drop zones: the real file input sits invisibly on top, so click and drag-and-drop both work */
+  .drop { position: relative; display: flex; align-items: center; justify-content: center; min-height: 116px; border: 1.5px dashed var(--line-strong); border-radius: 12px; background: var(--well); overflow: hidden; }
+  .drop:hover, .drop.over { border-color: var(--select); }
+  .drop:focus-within { outline: 2px solid var(--select); outline-offset: 2px; }
+  .drop input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 2; }
+  .drop-text { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 0.15rem; padding: 1rem; text-align: center; pointer-events: none; }
+  .drop-text .ico { color: var(--muted); margin-bottom: 0.3rem; }
+  .drop-text .ico svg { width: 1.6rem; height: 1.6rem; stroke-width: 1.4; }
+  .drop-title { font-weight: 600; overflow-wrap: anywhere; }
+  .drop-sub { color: var(--muted); font-size: 0.82rem; }
+  .drop img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .drop.has-image { min-height: 180px; }
+  .drop.has-image .drop-text { position: absolute; left: 0; right: 0; bottom: 0; align-items: flex-start; padding: 0.7rem 0.9rem; text-align: left; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, 0.75)); }
+  .drop.has-image .drop-text .ico { display: none; }
+  .drop.has-image .drop-sub { color: rgba(255, 255, 255, 0.8); }
+
+  /* Detail */
+  .detail-dialog { width: min(1040px, 94vw); max-width: none; max-height: 90dvh; border-radius: 18px; overflow: hidden; }
+  .close-float { position: absolute; top: 0.9rem; right: 0.9rem; z-index: 3; background: rgba(18, 20, 24, 0.7); color: #fff; border-color: rgba(255, 255, 255, 0.2); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+  .close-float:hover { background: rgba(18, 20, 24, 0.95); }
+  .detail-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); max-height: 90dvh; }
+  .detail-media { display: grid; place-items: center; min-height: 320px; background: var(--well); color: var(--faint); }
+  .detail-media img { width: 100%; height: 100%; max-height: 90dvh; object-fit: contain; display: block; }
+  .detail-info { display: flex; flex-direction: column; gap: 1.25rem; padding: 2rem 1.75rem 1.75rem; overflow-y: auto; max-height: 90dvh; }
+  .detail-info h2 { margin: 0; padding-right: 2.5rem; font-family: var(--display); font-size: 1.9rem; line-height: 1.1; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+  .detail-info p { margin: 0; max-width: 60ch; color: var(--muted); line-height: 1.65; white-space: pre-wrap; }
+  .specs { margin: 0; }
+  .spec { display: flex; justify-content: space-between; gap: 1rem; padding: 0.6rem 0; border-top: 1px solid var(--line); }
+  .spec:last-child { border-bottom: 1px solid var(--line); }
+  .spec dt { color: var(--muted); }
+  .spec dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  .tags { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .tag { padding: 0.15rem 0.6rem; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--muted); font-size: 0.85rem; }
+  .detail-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: auto; }
+
+  /* Confirm */
+  .confirm { width: min(400px, 92vw); border-radius: 16px; }
+  .confirm form { padding: 1.5rem; }
+  .confirm h2 { margin: 0 0 0.4rem; font-family: var(--display); font-size: 1.25rem; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+  .confirm p { margin: 0 0 1.4rem; color: var(--muted); }
+  .confirm-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+
+  /* Toast */
+  .toast { position: fixed; left: 50%; bottom: 1.5rem; display: flex; align-items: center; gap: 0.6rem; max-width: min(92vw, 520px); padding: 0.75rem 1.1rem; border-radius: 12px; background: var(--ink); color: var(--bg); font-weight: 500; opacity: 0; transform: translate(-50%, 12px); pointer-events: none; transition: opacity 0.2s, transform 0.2s; z-index: 100; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .toast.error::before { background: var(--danger); }
+
+  /* ---------- Small screens ---------- */
+  @media (max-width: 900px) {
+    .stage-inner { grid-template-columns: 1fr; gap: 2.25rem; padding: 2.25rem 0 4rem; min-height: 0; }
+    .turntable { height: 240px; }
+    .detail-grid { grid-template-columns: 1fr; overflow-y: auto; }
+    .detail-media { min-height: 220px; max-height: 40dvh; }
+    .detail-media img { max-height: 40dvh; }
+    .detail-info { max-height: none; overflow: visible; }
+    .status span:last-child { display: none; }
+  }
+  @media (max-width: 520px) {
+    .wrap { width: calc(100% - 2rem); }
+    .two { grid-template-columns: 1fr; }
+    .search { width: 100%; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="wrap topbar">
+  <a class="brand" href="/" aria-label="Asset Gallery home">
+    <span class="ico" data-icon="cube"></span>
+    Asset Gallery
+  </a>
+  <div class="top-actions">
+    <span id="status" class="status" role="status"><span class="dot"></span><span id="statusText">Connecting</span></span>
+    <button type="button" class="icon-btn" id="themeBtn" aria-label="Switch colour theme"><span class="ico" id="themeIcon"></span></button>
+    <button type="button" class="btn primary" id="newBtn"><span class="ico" data-icon="plus"></span>Upload asset</button>
+  </div>
+</header>
+
+<main>
+  <section class="stage" aria-label="Overview">
+    <div class="floor-wrap" aria-hidden="true"><div class="floor"></div></div>
+    <div class="wrap stage-inner">
+      <div>
+        <h1>A home for everything you've modeled.</h1>
+        <p class="lede">Upload FBX files with a preview image, sort them by category and tag, and download any model in one click.</p>
+        <div class="stage-cta">
+          <button type="button" class="btn primary" id="ctaUpload"><span class="ico" data-icon="plus"></span>Upload asset</button>
+          <a class="text-link" href="#library">Browse the library</a>
+        </div>
+        <ul class="facts" id="facts" aria-label="Library totals"></ul>
+      </div>
+      <div class="stage-visual" id="stageVisual"></div>
+    </div>
+  </section>
+
+  <section class="wrap library" id="library" aria-label="Library">
+    <div class="toolbar">
+      <div class="tabs" id="tabs" role="group" aria-label="Filter by category"></div>
+      <div class="search">
+        <span class="ico" data-icon="search"></span>
+        <input type="search" id="search" placeholder="Search assets" aria-label="Search assets" autocomplete="off">
+        <kbd aria-hidden="true">/</kbd>
+      </div>
+    </div>
+    <p class="result-count" id="resultCount"></p>
+    <div id="listArea" aria-live="polite"></div>
+  </section>
+</main>
+
+<!-- Upload / edit drawer -->
+<dialog id="drawer" class="drawer" aria-labelledby="drawerTitle">
+  <form id="assetForm" novalidate>
+    <div class="drawer-head">
+      <div>
+        <h2 id="drawerTitle">New asset</h2>
+        <p id="drawerSub">Add a preview image and a 3D file, then fill in the details.</p>
+      </div>
+      <button type="button" class="icon-btn" id="drawerClose" aria-label="Close"><span class="ico" data-icon="close"></span></button>
+    </div>
+
+    <div class="drawer-body">
+      <div class="form-error" id="formError" role="alert"></div>
+
+      <div class="field">
+        <span class="field-label" id="imageLabel">Preview image</span>
+        <div class="drop" id="imageDrop">
+          <input type="file" id="image" accept="image/*" aria-labelledby="imageLabel">
+          <img id="preview" alt="" hidden>
+          <div class="drop-text">
+            <span class="ico" data-icon="image"></span>
+            <span class="drop-title" id="imageDropTitle">Drop an image or browse</span>
+            <span class="drop-sub" id="imageDropSub">JPG, PNG, WebP or GIF</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="field-label" id="modelLabel">3D model file</span>
+        <div class="drop" id="modelDrop">
+          <input type="file" id="model" accept=".fbx,.obj,.glb,.gltf,.blend,.zip" aria-labelledby="modelLabel">
+          <div class="drop-text">
+            <span class="ico" data-icon="cube"></span>
+            <span class="drop-title" id="modelDropTitle">Drop a model or browse</span>
+            <span class="drop-sub" id="modelDropSub">FBX, OBJ, GLB, GLTF, BLEND or ZIP, up to 100 MB</span>
+          </div>
+        </div>
+      </div>
+
+      <label class="field">
+        <span class="field-label">Title</span>
+        <input type="text" id="title" required maxlength="100" placeholder="Sci-fi cargo crate">
+      </label>
+
+      <label class="field">
+        <span class="field-label">Description</span>
+        <textarea id="description" maxlength="2000" placeholder="Modeling approach, texture set, intended use"></textarea>
+      </label>
+
+      <div class="two">
+        <label class="field">
+          <span class="field-label">Category</span>
+          <select id="category" required></select>
+        </label>
+        <label class="field">
+          <span class="field-label">Polygons</span>
+          <input type="number" id="polyCount" min="0" step="1" placeholder="12000">
+        </label>
+      </div>
+
+      <label class="field">
+        <span class="field-label">Software</span>
+        <input type="text" id="software" list="softwareList" placeholder="Blender">
+        <datalist id="softwareList">
+          <option value="Blender"></option>
+          <option value="Maya"></option>
+          <option value="3ds Max"></option>
+          <option value="ZBrush"></option>
+          <option value="Substance Painter"></option>
+          <option value="Houdini"></option>
+        </datalist>
+      </label>
+
+      <label class="field">
+        <span class="field-label">Tags</span>
+        <input type="text" id="tags" placeholder="hard-surface, game-ready, pbr">
+        <span class="hint">Separate tags with commas.</span>
+      </label>
+    </div>
+
+    <div class="drawer-foot">
+      <button type="button" class="btn ghost" id="cancelBtn">Cancel</button>
+      <button type="submit" class="btn primary" id="submitBtn">Save asset</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Detail -->
+<dialog id="detail" class="detail-dialog" aria-label="Asset details">
+  <button type="button" class="icon-btn close-float" id="detailClose" aria-label="Close"><span class="ico" data-icon="close"></span></button>
+  <div class="detail-grid" id="detailBody"></div>
+</dialog>
+
+<!-- Confirm -->
+<dialog id="confirm" class="confirm" aria-labelledby="confirmTitle">
+  <form method="dialog">
+    <h2 id="confirmTitle"></h2>
+    <p id="confirmText"></p>
+    <div class="confirm-actions">
+      <button class="btn ghost" value="cancel" autofocus>Cancel</button>
+      <button class="btn danger" value="ok" id="confirmOk">Delete asset</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+  // The page is served by the same Express server, so relative URLs work
+  const API = "/api/assets";
+
+  // Keep in sync with CATEGORIES in models/Asset.js
+  const CATEGORIES = ["Character", "Environment", "Prop", "Vehicle", "Weapon", "Architecture", "Other"];
+  const IMAGE_EXT = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
+  const MODEL_EXT = [".fbx", ".obj", ".glb", ".gltf", ".blend", ".zip"];
+  const MAX_SIZE = 100 * 1024 * 1024;
+
+  // ---------- state ----------
+  let assets = [];
+  let loading = true;
+  let loadError = "";
+  let activeCategory = "All";
+  let editing = null;      // the asset being edited, or null when adding
+  let previewUrl = null;   // object URL for a newly chosen image
+
+  const $ = (id) => document.getElementById(id);
+  const f = {
+    title: $("title"), description: $("description"), category: $("category"),
+    polyCount: $("polyCount"), software: $("software"), tags: $("tags"),
+    image: $("image"), model: $("model"),
+  };
+  const form = $("assetForm");
+  const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+
+  // ---------- icons ----------
+  const svg = (p) =>
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+  const ICONS = {
+    plus: svg('<path d="M12 5v14M5 12h14"/>'),
+    edit: svg('<path d="M4 20h4L19 9a2.8 2.8 0 00-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'),
+    download: svg('<path d="M12 4v11m0 0l-4-4m4 4l4-4"/><path d="M5 20h14"/>'),
+    trash: svg('<path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/>'),
+    close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+    search: svg('<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>'),
+    sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/>'),
+    moon: svg('<path d="M20 14.5A8 8 0 019.5 4 8 8 0 1020 14.5z"/>'),
+    image: svg('<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/>'),
+    cube: svg('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>'),
+    mesh: svg('<path d="M12 4l8.5 15h-17z"/><path d="M7.9 12h8.2"/>'),
+    disk: svg('<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/>'),
+  };
+  const icon = (name) => { const s = document.createElement("span"); s.className = "ico"; s.innerHTML = ICONS[name]; return s; };
+  document.querySelectorAll("[data-icon]").forEach((el) => { el.innerHTML = ICONS[el.dataset.icon]; });
+
+  // ---------- helpers ----------
+  // textContent keeps user text from being treated as HTML
+  function h(tag, className, text) {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    if (text !== undefined && text !== null) el.textContent = text;
+    return el;
+  }
+
+  function formatSize(bytes) {
+    if (!bytes) return "";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " KB";
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+  }
+
+  const fileExt = (name) => (name && name.includes(".") ? name.split(".").pop().toLowerCase() : "");
+
+  async function request(url, options = {}) {
+    let res;
+    try {
+      res = await fetch(url, options);
+    } catch {
+      setStatus(false);
+      throw new Error("Can't reach the server. Start it with npm run dev, then refresh.");
+    }
+    setStatus(true);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.errors ? data.errors.join(". ") : data.message || "Request failed");
+    }
+    return data;
+  }
+
+  function setStatus(online) {
+    $("status").className = "status " + (online ? "online" : "offline");
+    $("statusText").textContent = online ? "Connected" : "Server offline";
+  }
+
+  let toastTimer;
+  function toast(message, type) {
+    const el = $("toast");
+    el.textContent = message;
+    el.className = "toast show" + (type === "error" ? " error" : "");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove("show"), 3000);
+  }
+
+  function showFormError(message) {
+    $("formError").textContent = message || "";
+  }
+
+  function checkFile(file, allowed, label) {
+    if (!file) return null;
+    const ext = "." + file.name.split(".").pop().toLowerCase();
+    if (!allowed.includes(ext)) return `${label} must be one of: ${allowed.join(", ")}`;
+    if (file.size > MAX_SIZE) return `${label} is larger than 100 MB`;
+    return null;
+  }
+
+  function askConfirm(title, text, okLabel) {
+    return new Promise((resolve) => {
+      const dlg = $("confirm");
+      $("confirmTitle").textContent = title;
+      $("confirmText").textContent = text;
+      $("confirmOk").textContent = okLabel;
+      dlg.returnValue = "";
+      dlg.addEventListener("close", () => resolve(dlg.returnValue === "ok"), { once: true });
+      dlg.showModal();
+    });
+  }
+
+  // ---------- theme ----------
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    $("themeIcon").innerHTML = theme === "dark" ? ICONS.sun : ICONS.moon;
+    try { localStorage.setItem("theme", theme); } catch (e) { /* private mode */ }
+  }
+  $("themeBtn").addEventListener("click", () => {
+    applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+  });
+  $("themeIcon").innerHTML = document.documentElement.dataset.theme === "dark" ? ICONS.sun : ICONS.moon;
+
+  // ---------- form dropdown ----------
+  (function fillCategory() {
+    const first = h("option", null, "Choose a category");
+    first.value = "";
+    f.category.appendChild(first);
+    CATEGORIES.forEach((c) => { const o = h("option", null, c); o.value = c; f.category.appendChild(o); });
+  })();
+
+  // ---------- rendering ----------
+  function filtersActive() {
+    return Boolean($("search").value.trim()) || activeCategory !== "All";
+  }
+
+  function visibleAssets() {
+    const q = $("search").value.trim().toLowerCase();
+    return assets.filter((a) => {
+      if (activeCategory !== "All" && a.category !== activeCategory) return false;
+      if (!q) return true;
+      return [a.title, a.description, a.software, ...(a.tags || [])]
+        .some((v) => (v || "").toLowerCase().includes(q));
+    });
+  }
+
+  function featuredAsset() {
+    return assets.find((a) => a.image) || null; // the API returns newest first
+  }
+
+  function renderFacts() {
+    const list = $("facts");
+    list.replaceChildren();
+    if (loading || loadError || assets.length === 0) return;
+
+    const polys = assets.reduce((sum, a) => sum + (a.polyCount || 0), 0);
+    const bytes = assets.reduce((sum, a) => sum + (a.modelSize || 0), 0);
+    const cats = new Set(assets.map((a) => a.category)).size;
+
+    const add = (iconName, value, label) => {
+      const li = h("li");
+      li.appendChild(icon(iconName));
+      li.append(h("strong", null, value), document.createTextNode(label));
+      list.appendChild(li);
+    };
+    add("cube", String(assets.length), assets.length === 1 ? " asset" : " assets");
+    if (polys) add("mesh", compact.format(polys), " polygons");
+    if (bytes) add("disk", formatSize(bytes), " of models");
+    if (cats > 1) add("image", String(cats), " categories");
+  }
+
+  function renderStage() {
+    const visual = $("stageVisual");
+    visual.replaceChildren();
+    if (loading) return;
+
+    const feat = loadError ? null : featuredAsset();
+    if (feat) {
+      const fig = h("figure", "featured");
+      const media = h("div", "media");
+      const btn = h("button", "media-btn");
+      btn.type = "button";
+      btn.setAttribute("aria-label", "View " + feat.title);
+      const img = document.createElement("img");
+      img.src = "/uploads/images/" + feat.image;
+      img.alt = "";
+      btn.appendChild(img);
+      btn.addEventListener("click", () => openDetail(feat._id));
+      media.appendChild(btn);
+
+      const cap = h("figcaption", "feat-cap");
+      cap.append(h("span", "feat-title", feat.title), h("span", "feat-sub", "Recently added to " + feat.category));
+      fig.append(media, cap);
+      visual.appendChild(fig);
+    } else {
+      const t = h("div", "turntable");
+      t.setAttribute("aria-hidden", "true");
+      const cube = h("div", "cube");
+      for (let i = 0; i < 6; i++) cube.appendChild(document.createElement("i"));
+      t.appendChild(cube);
+      visual.appendChild(t);
+    }
+  }
+
+  function renderTabs() {
+    const wrap = $("tabs");
+    wrap.replaceChildren();
+
+    const counts = {};
+    assets.forEach((a) => { counts[a.category] = (counts[a.category] || 0) + 1; });
+
+    const make = (label, value, count) => {
+      const b = h("button", "tab", label);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(activeCategory === value));
+      b.appendChild(h("span", "tab-count", String(count)));
+      b.addEventListener("click", () => { activeCategory = value; renderTabs(); renderList(); });
+      wrap.appendChild(b);
+    };
+    make("All", "All", assets.length);
+    CATEGORIES.filter((c) => counts[c] || c === activeCategory).forEach((c) => make(c, c, counts[c] || 0));
+  }
+
+  function notice(title, text, buttonLabel, onClick) {
+    const box = h("div", "notice");
+    box.append(h("h2", null, title), h("p", null, text));
+    if (buttonLabel) {
+      const b = h("button", "btn primary", buttonLabel);
+      b.type = "button";
+      b.addEventListener("click", onClick);
+      box.appendChild(b);
+    }
+    return box;
+  }
+
+  function buildCard(a) {
+    const card = h("article", "asset");
+
+    const media = h("div", "media");
+    const open = h("button", "media-btn");
+    open.type = "button";
+    open.setAttribute("aria-label", "View " + a.title);
+    if (a.image) {
+      const img = document.createElement("img");
+      img.src = "/uploads/images/" + a.image;
+      img.alt = "";
+      img.loading = "lazy";
+      open.appendChild(img);
+    } else {
+      const ph = h("div", "placeholder");
+      ph.appendChild(icon("cube"));
+      open.appendChild(ph);
+    }
+    open.addEventListener("click", () => openDetail(a._id));
+
+    const tools = h("div", "tools");
+    if (a.modelFile) {
+      const dl = h("a", "tool");
+      dl.href = `${API}/${a._id}/download`;
+      dl.setAttribute("aria-label", "Download model for " + a.title);
+      dl.title = "Download model";
+      dl.appendChild(icon("download"));
+      tools.appendChild(dl);
+    }
+    const edit = h("button", "tool");
+    edit.type = "button";
+    edit.title = "Edit asset";
+    edit.setAttribute("aria-label", "Edit " + a.title);
+    edit.appendChild(icon("edit"));
+    edit.addEventListener("click", () => openDrawer(a));
+    const del = h("button", "tool delete");
+    del.type = "button";
+    del.title = "Delete asset";
+    del.setAttribute("aria-label", "Delete " + a.title);
+    del.appendChild(icon("trash"));
+    del.addEventListener("click", () => removeAsset(a));
+    tools.append(edit, del);
+
+    media.append(open, tools);
+
+    const caption = h("div", "caption");
+    caption.append(h("h3", "asset-title", a.title), h("span", "asset-cat", a.category));
+
+    const meta = h("div", "meta");
+    if (a.software) {
+      const s = h("span");
+      s.append(icon("cube"), document.createTextNode(a.software));
+      meta.appendChild(s);
+    }
+    if (a.polyCount !== null && a.polyCount !== undefined) {
+      const s = h("span");
+      s.append(icon("mesh"), document.createTextNode(a.polyCount.toLocaleString() + " polygons"));
+      meta.appendChild(s);
+    }
+    if (a.modelFile) meta.appendChild(h("span", "ext", fileExt(a.modelName)));
+
+    card.append(media, caption);
+    if (meta.childNodes.length) card.appendChild(meta);
+    return card;
+  }
+
+  function renderList() {
+    const area = $("listArea");
+    area.replaceChildren();
+    $("resultCount").textContent = "";
+
+    if (loading) {
+      const grid = h("div", "grid");
+      for (let i = 0; i < 6; i++) {
+        const sk = h("div", "asset skeleton");
+        sk.append(h("div", "media"), h("div", "bar"), h("div", "bar"));
+        grid.appendChild(sk);
+      }
+      area.appendChild(grid);
+      return;
+    }
+    if (loadError) {
+      area.appendChild(notice("Can't load your library", loadError, "Try again", () => loadAssets()));
+      return;
+    }
+    if (assets.length === 0) {
+      area.appendChild(notice("Your library is empty",
+        "Upload your first model with a preview image, and it will appear here.", "Upload asset", () => openDrawer()));
+      return;
+    }
+
+    let list = visibleAssets();
+    const total = list.length;
+
+    // The featured piece is already shown above, so don't repeat it when browsing everything
+    const feat = featuredAsset();
+    if (!filtersActive() && feat) list = list.filter((a) => a._id !== feat._id);
+
+    if (filtersActive()) {
+      $("resultCount").textContent = `Showing ${total} of ${assets.length} assets`;
+    }
+
+    if (list.length === 0) {
+      if (filtersActive()) {
+        area.appendChild(notice("No assets match", "Try a different search or category.", "Clear filters", () => {
+          $("search").value = "";
+          activeCategory = "All";
+          renderTabs();
+          renderList();
+        }));
+      }
+      return;
+    }
+
+    const grid = h("div", "grid");
+    list.forEach((a) => grid.appendChild(buildCard(a)));
+    area.appendChild(grid);
+  }
+
+  function renderAll() {
+    renderFacts();
+    renderStage();
+    renderTabs();
+    renderList();
+  }
+
+  // ---------- READ ----------
+  async function loadAssets() {
+    try {
+      assets = await request(API);
+      loadError = "";
+    } catch (err) {
+      assets = [];
+      loadError = err.message;
+    }
+    loading = false;
+    renderAll();
+  }
+
+  async function openDetail(id) {
+    try {
+      const a = await request(`${API}/${id}`); // READ one
+      const body = $("detailBody");
+      body.replaceChildren();
+
+      const media = h("div", "detail-media");
+      if (a.image) {
+        const img = document.createElement("img");
+        img.src = "/uploads/images/" + a.image;
+        img.alt = a.title;
+        media.appendChild(img);
+      } else {
+        media.appendChild(icon("cube"));
+      }
+
+      const info = h("div", "detail-info");
+      info.appendChild(h("h2", null, a.title));
+      if (a.description) info.appendChild(h("p", null, a.description));
+
+      const specs = h("dl", "specs");
+      const spec = (label, value) => {
+        if (value === null || value === undefined || value === "") return;
+        const row = h("div", "spec");
+        row.append(h("dt", null, label), h("dd", null, String(value)));
+        specs.appendChild(row);
+      };
+      spec("Category", a.category);
+      spec("Software", a.software);
+      spec("Polygons", a.polyCount !== null && a.polyCount !== undefined ? a.polyCount.toLocaleString() : "");
+      spec("Model file", a.modelName);
+      spec("File size", formatSize(a.modelSize));
+      spec("Added", new Date(a.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }));
+      info.appendChild(specs);
+
+      if (a.tags && a.tags.length) {
+        const tags = h("div", "tags");
+        a.tags.forEach((t) => tags.appendChild(h("span", "tag", t)));
+        info.appendChild(tags);
+      }
+
+      const actions = h("div", "detail-actions");
+      if (a.modelFile) {
+        const dl = h("a", "btn primary");
+        dl.href = `${API}/${a._id}/download`;
+        dl.append(icon("download"), document.createTextNode("Download model"));
+        actions.appendChild(dl);
+      }
+      const edit = h("button", "btn ghost");
+      edit.type = "button";
+      edit.append(icon("edit"), document.createTextNode("Edit asset"));
+      edit.addEventListener("click", () => { $("detail").close(); openDrawer(a); });
+      const del = h("button", "btn danger");
+      del.type = "button";
+      del.append(icon("trash"), document.createTextNode("Delete asset"));
+      del.addEventListener("click", () => removeAsset(a));
+      actions.append(edit, del);
+      info.appendChild(actions);
+
+      body.append(media, info);
+      $("detail").showModal();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  }
+
+  $("detailClose").addEventListener("click", () => $("detail").close());
+  // Clicking the dark backdrop closes the detail view
+  $("detail").addEventListener("click", (e) => { if (e.target === $("detail")) $("detail").close(); });
+
+  // ---------- drop zones ----------
+  function refreshImageDrop() {
+    const file = f.image.files[0];
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+
+    let src = null;
+    if (file) { previewUrl = URL.createObjectURL(file); src = previewUrl; }
+    else if (editing && editing.image) src = "/uploads/images/" + editing.image;
+
+    const img = $("preview");
+    if (src) { img.src = src; img.hidden = false; } else { img.removeAttribute("src"); img.hidden = true; }
+    $("imageDrop").classList.toggle("has-image", Boolean(src));
+    $("imageDropTitle").textContent = file ? file.name : (src ? "Replace image" : "Drop an image or browse");
+    $("imageDropSub").textContent = file ? formatSize(file.size) : "JPG, PNG, WebP or GIF";
+  }
+
+  function refreshModelDrop() {
+    const file = f.model.files[0];
+    let title = "Drop a model or browse";
+    let sub = "FBX, OBJ, GLB, GLTF, BLEND or ZIP, up to 100 MB";
+    if (file) { title = file.name; sub = formatSize(file.size); }
+    else if (editing && editing.modelFile) { title = editing.modelName; sub = "Current file. Choose another to replace it."; }
+    $("modelDropTitle").textContent = title;
+    $("modelDropSub").textContent = sub;
+  }
+
+  [["imageDrop", f.image, IMAGE_EXT, "Image", refreshImageDrop], ["modelDrop", f.model, MODEL_EXT, "Model", refreshModelDrop]]
+    .forEach(([zoneId, input, allowed, label, refresh]) => {
+      const zone = $(zoneId);
+      ["dragenter", "dragover"].forEach((ev) => input.addEventListener(ev, () => zone.classList.add("over")));
+      ["dragleave", "drop"].forEach((ev) => input.addEventListener(ev, () => zone.classList.remove("over")));
+      input.addEventListener("change", () => {
+        const err = checkFile(input.files[0], allowed, label);
+        if (err) { input.value = ""; showFormError(err); } else { showFormError(""); }
+        refresh();
+      });
+    });
+
+  // ---------- upload / edit drawer ----------
+  function resetForm() {
+    form.reset();
+    editing = null;
+    $("drawerTitle").textContent = "New asset";
+    $("drawerSub").textContent = "Add a preview image and a 3D file, then fill in the details.";
+    $("submitBtn").textContent = "Save asset";
+    $("submitBtn").disabled = false;
+    showFormError("");
+    refreshImageDrop();
+    refreshModelDrop();
+  }
+
+  function openDrawer(asset) {
+    resetForm();
+    if (asset) {
+      editing = asset;
+      f.title.value = asset.title;
+      f.description.value = asset.description || "";
+      f.category.value = asset.category;
+      f.polyCount.value = asset.polyCount ?? "";
+      f.software.value = asset.software || "";
+      f.tags.value = (asset.tags || []).join(", ");
+      $("drawerTitle").textContent = "Edit asset";
+      $("drawerSub").textContent = "Leave the files empty to keep the current ones.";
+      $("submitBtn").textContent = "Save changes";
+      refreshImageDrop();
+      refreshModelDrop();
+    }
+    $("drawer").showModal();
+    f.title.focus();
+  }
+
+  $("drawer").addEventListener("close", resetForm); // Esc, Cancel and a finished save all land here
+  $("drawerClose").addEventListener("click", () => $("drawer").close());
+  $("cancelBtn").addEventListener("click", () => $("drawer").close());
+  $("newBtn").addEventListener("click", () => openDrawer());
+  $("ctaUpload").addEventListener("click", () => openDrawer());
+
+  // ---------- CREATE / UPDATE ----------
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    showFormError("");
+
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+
+    const imageFile = f.image.files[0];
+    const modelFile = f.model.files[0];
+    const fileError = checkFile(imageFile, IMAGE_EXT, "Image") || checkFile(modelFile, MODEL_EXT, "Model");
+    if (fileError) { showFormError(fileError); return; }
+
+    // FormData sends text fields and files in one request.
+    // Don't set a Content-Type header: the browser adds it, including the boundary.
+    const fd = new FormData();
+    fd.append("title", f.title.value.trim());
+    fd.append("description", f.description.value.trim());
+    fd.append("category", f.category.value);
+    fd.append("polyCount", f.polyCount.value);
+    fd.append("software", f.software.value.trim());
+    fd.append("tags", f.tags.value);
+    if (imageFile) fd.append("image", imageFile);
+    if (modelFile) fd.append("model", modelFile);
+
+    const isEdit = Boolean(editing);
+    const btn = $("submitBtn");
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Uploading";
+    try {
+      if (isEdit) {
+        await request(`${API}/${editing._id}`, { method: "PUT", body: fd }); // UPDATE
+      } else {
+        await request(API, { method: "POST", body: fd }); // CREATE
+      }
+      $("drawer").close();
+      toast(isEdit ? "Changes saved" : "Asset saved");
+      await loadAssets();
+    } catch (err) {
+      showFormError(err.message);
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  });
+
+  // ---------- DELETE ----------
+  async function removeAsset(a) {
+    const ok = await askConfirm(
+      `Delete “${a.title}”?`,
+      "The preview image and the 3D file will be removed for good.",
+      "Delete asset"
+    );
+    if (!ok) return;
+    try {
+      await request(`${API}/${a._id}`, { method: "DELETE" });
+      if ($("detail").open) $("detail").close();
+      toast("Asset deleted");
+      await loadAssets();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  }
+
+  // ---------- search ----------
+  $("search").addEventListener("input", renderList);
+
+  // Press / anywhere to jump to search
+  document.addEventListener("keydown", (e) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+    const modalOpen = document.querySelector("dialog[open]");
+    if (e.key === "/" && !typing && !modalOpen && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      $("search").focus();
+    }
+  });
+
+  renderAll();   // shows the loading skeletons
+  loadAssets();
+</script>
+</body>
+</html>
